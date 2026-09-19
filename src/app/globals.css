@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   NER-RouteAI — Global Styles
+   Theme: "Borders of Nature & Tech"
+   ============================================ */
+
+/* --- CSS Custom Properties --- */
+:root {
+  --bg-primary: #14201A;
+  --bg-surface: #1A2E23;
+  --bg-elevated: #213830;
+  --border-subtle: rgba(226, 232, 240, 0.08);
+  --border-active: rgba(168, 85, 247, 0.3);
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --orchid: #A855F7;
+  --teal: #0D9488;
+  --amber: #F59E0B;
+  --danger: #EF4444;
+  --safe: #22C55E;
+}
+
+/* --- Base Reset --- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Glass Utilities --- */
+@layer utilities {
+  .glass {
+    background: rgba(26, 46, 35, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.08);
+  }
+
+  .glass-heavy {
+    background: rgba(26, 46, 35, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(226, 232, 240, 0.1);
+  }
+
+  .glass-ai {
+    background: rgba(168, 85, 247, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(168, 85, 247, 0.15);
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.08);
+  }
+
+  .glass-danger {
+    background: rgba(239, 68, 68, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #A855F7, #0D9488, #22C55E);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-orchid {
+    background: linear-gradient(135deg, #A855F7, #C084FC);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-glow-orchid {
+    text-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+  }
+
+  .text-glow-teal {
+    text-shadow: 0 0 20px rgba(13, 148, 136, 0.5);
+  }
+}
+
+/* --- Skeleton Loader --- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+/* --- Leaflet Map Overrides --- */
+.leaflet-container {
+  background: #14201A !important;
+  border-radius: 12px;
+  font-family: 'Inter', sans-serif;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+}
+
+.leaflet-control-zoom a {
+  background: rgba(26, 46, 35, 0.9) !important;
+  color: #E2E8F0 !important;
+  border: 1px solid rgba(226, 232, 240, 0.1) !important;
+  backdrop-filter: blur(12px);
+}
+
+.leaflet-control-zoom a:hover {
+  background: rgba(168, 85, 247, 0.2) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: rgba(26, 46, 35, 0.95) !important;
+  color: #E2E8F0 !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(226, 232, 240, 0.1) !important;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+.leaflet-popup-tip {
+  background: rgba(26, 46, 35, 0.95) !important;
+}
+
+.leaflet-popup-close-button {
+  color: #94A3B8 !important;
+}
+
+.leaflet-tile-pane {
+  filter: brightness(0.7) contrast(1.1) saturate(0.8) hue-rotate(90deg);
+}
+
+/* --- Chart.js Overrides --- */
+canvas {
+  max-width: 100%;
+}
+
+/* --- Selection Color --- */
+::selection {
+  background: rgba(168, 85, 247, 0.3);
+  color: #E2E8F0;
+}
+
+/* --- Focus Ring --- */
+*:focus-visible {
+  outline: 2px solid rgba(168, 85, 247, 0.5);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --- Pulse Dot (for live indicators) --- */
+.pulse-dot {
+  position: relative;
+}
+.pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.4;
+  animation: markerPulse 2s ease-in-out infinite;
+}
+
+@keyframes markerPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.8); opacity: 0; }
+}
+
+/* --- Route Animation --- */
+.route-line-animated {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: routeDrawAnim 3s ease-in-out forwards;
+}
+
+@keyframes routeDrawAnim {
+  to { stroke-dashoffset: 0; }
+}
+
+/* --- Analyzing Spinner --- */
+.ai-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(168, 85, 247, 0.2);
+  border-top-color: #A855F7;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
