@@ -3,7 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import DispatchMap, { DispatchMapRoute, DispatchMapIncident } from '@/components/DispatchMap';
+import dynamic from 'next/dynamic';
+import type { DispatchMapRoute, DispatchMapIncident } from '@/components/DispatchMap';
+
+const DispatchMap = dynamic(() => import('@/components/DispatchMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[480px] bg-[#0F1714] rounded-xl flex flex-col items-center justify-center border border-white/10 gap-2">
+      <div className="ai-spinner" />
+      <span className="text-xs text-slate-400">Loading MapLibre Vector Engine...</span>
+    </div>
+  ),
+});
 import Badge from '@/components/ui/Badge';
 import {
   Search,
@@ -607,7 +618,7 @@ export default function NewDispatchWizardPage() {
                     <Navigation className="w-3.5 h-3.5 text-teal-400" /> Distance
                   </div>
                   <div className="text-lg font-bold text-white mt-1">
-                    {plannedRoute.route.distanceKm} km
+                    {plannedRoute.route?.distanceKm ?? (plannedRoute as any).distanceKm ?? 0} km
                   </div>
                 </div>
 
@@ -616,7 +627,8 @@ export default function NewDispatchWizardPage() {
                     <Clock className="w-3.5 h-3.5 text-purple-400" /> Duration
                   </div>
                   <div className="text-lg font-bold text-white mt-1">
-                    {Math.floor(plannedRoute.route.durationMinutes / 60)}h {plannedRoute.route.durationMinutes % 60}m
+                    {Math.floor(((plannedRoute.route?.durationMinutes ?? (plannedRoute as any).durationMinutes ?? 0)) / 60)}h{' '}
+                    {((plannedRoute.route?.durationMinutes ?? (plannedRoute as any).durationMinutes ?? 0)) % 60}m
                   </div>
                 </div>
 
@@ -625,7 +637,7 @@ export default function NewDispatchWizardPage() {
                     <Mountain className="w-3.5 h-3.5 text-amber-400" /> Elevation Gain
                   </div>
                   <div className="text-lg font-bold text-white mt-1">
-                    +{plannedRoute.route.elevationGainMeters}m
+                    +{plannedRoute.route?.elevationGainMeters ?? (plannedRoute as any).elevationGainMeters ?? 0}m
                   </div>
                 </div>
               </div>
@@ -636,9 +648,9 @@ export default function NewDispatchWizardPage() {
                 routes={[
                   {
                     id: 'calculated-route',
-                    coordinates: plannedRoute.route.coordinates,
+                    coordinates: plannedRoute.route?.coordinates ?? (plannedRoute as any).coordinates ?? [],
                     color: '#A855F7',
-                    label: `${selectedOrigin?.name} to ${selectedDest?.name}`,
+                    label: `${selectedOrigin?.name || 'Origin'} to ${selectedDest?.name || 'Destination'}`,
                   },
                 ]}
               />

@@ -88,15 +88,14 @@ export async function findNearestSafeLocations(
           const match = typeof d.coordinates === 'string'
             ? d.coordinates.match(/POINT\(([^ ]+) ([^ ]+)\)/)
             : null;
+          const lng = match ? parseFloat(match[1]) : NaN;
+          const lat = match ? parseFloat(match[2]) : NaN;
           return {
             id: d.id,
             name: d.name,
             type: d.type,
             state: d.state,
-            coordinates: {
-              lng: match ? parseFloat(match[1]) : 91.75,
-              lat: match ? parseFloat(match[2]) : 26.15,
-            },
+            coordinates: { lng, lat },
             contactNumber: d.contact_number,
             capacityDescription: d.capacity_description,
           };
@@ -109,16 +108,28 @@ export async function findNearestSafeLocations(
 
   // Calculate distances and sort
   const scored = candidateLocations.map((loc) => {
-    const distKm = parseFloat(haversineDistanceKm(vehicleLocation, loc.coordinates).toFixed(1));
-    const estMinutes = Math.round((distKm / 40) * 60);
+    const hasValidCoords =
+      typeof loc.coordinates.lat === 'number' &&
+      typeof loc.coordinates.lng === 'number' &&
+      !isNaN(loc.coordinates.lat) &&
+      !isNaN(loc.coordinates.lng);
+
+    const distKm = hasValidCoords
+      ? parseFloat(haversineDistanceKm(vehicleLocation, loc.coordinates).toFixed(1))
+      : 99999;
+    const estMinutes = hasValidCoords ? Math.round((distKm / 40) * 60) : 999;
     return {
       ...loc,
-      distanceKm: distKm,
-      estimatedTimeMinutes: Math.max(3, estMinutes),
+      distanceKm: distKm === 99999 ? NaN : distKm,
+      estimatedTimeMinutes: distKm === 99999 ? NaN : Math.max(3, estMinutes),
     };
   });
 
-  scored.sort((a, b) => a.distanceKm - b.distanceKm);
+  scored.sort((a, b) => {
+    if (isNaN(a.distanceKm)) return 1;
+    if (isNaN(b.distanceKm)) return -1;
+    return a.distanceKm - b.distanceKm;
+  });
   return scored.slice(0, limit);
 }
 

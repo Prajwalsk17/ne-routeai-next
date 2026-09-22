@@ -29,15 +29,16 @@ export default function SimulatorPage() {
 
   async function simulate() {
     setLoading(true);
-    const res = await authFetch('/api/simulation/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario_type: scenario, severity, duration_hours: duration, location_id: locId }) });
-    setResult(await res.json());
+    const res = await authFetch('/api/v1/simulation/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario_type: scenario, severity, duration_hours: duration, location_id: locId }) });
+    const json = await res.json();
+    setResult(json?.data || json);
     setLoading(false);
   }
 
   return (
     <div>
       <div className="mb-6"><h1 className="text-[1.75rem] font-extrabold text-white flex items-center gap-3"><FlaskConical size={28} className="text-amber" /> Disaster Simulator</h1>
-        <p className="text-mist-muted text-sm mt-1">What-if scenario modeling</p></div>
+        <p className="text-mist-muted text-sm mt-1">What-if scenario modeling · Deterministic vulnerability calculation engine (Synthetic simulation, not live sensor prediction)</p></div>
 
       <GlassCard className="p-6 mb-6">
         <div className="grid sm:grid-cols-2 gap-5">

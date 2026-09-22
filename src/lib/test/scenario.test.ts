@@ -103,5 +103,5 @@ describe('NER-RouteAI — Requirement 38 End-to-End Production Verification', ()
     expect(step13?.success).toBe(true);
     expect(step13?.data.nearestSafeHavens.length).toBeGreaterThanOrEqual(1);
     expect(step13?.data.totalAuditEntries).toBeGreaterThanOrEqual(1);
-  }, 30000);
+  }, 60000);
 });

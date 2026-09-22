@@ -1,5 +1,4 @@
 import { getServiceSupabase } from '@/lib/db/supabase';
-import { getAllVehicles } from '@/lib/db';
 import { GeocodingLocation } from '@/lib/providers/types';
 
 export interface VehicleProfile {

@@ -60,9 +60,9 @@ export default function MapView({ className = '', height = '500px' }: { classNam
   });
 
   useEffect(() => {
-    authFetch('/api/map-data')
+    authFetch('/api/v1/map-data')
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => { setData(d?.data || d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
@@ -111,7 +111,7 @@ export default function MapView({ className = '', height = '500px' }: { classNam
         />
 
         {/* Locations */}
-        {selectedLayer.locations && data.locations.map((loc: any) => (
+        {selectedLayer.locations && (data.locations || []).filter((loc: any) => typeof loc.lat === 'number' && typeof loc.lng === 'number' && !isNaN(loc.lat) && !isNaN(loc.lng) && loc.lat !== 0 && loc.lng !== 0).map((loc: any) => (
           <CircleMarker key={loc.id} center={[loc.lat, loc.lng]} {...circleIcon('#A855F7', loc.type === 'city' ? 8 : 5)}>
             <Popup>
               <div className="text-xs">
@@ -124,7 +124,7 @@ export default function MapView({ className = '', height = '500px' }: { classNam
         ))}
 
         {/* Warehouses */}
-        {selectedLayer.warehouses && data.warehouses.map((wh: any) => (
+        {selectedLayer.warehouses && (data.warehouses || []).filter((wh: any) => typeof wh.lat === 'number' && typeof wh.lng === 'number' && !isNaN(wh.lat) && !isNaN(wh.lng) && wh.lat !== 0 && wh.lng !== 0).map((wh: any) => (
           <CircleMarker key={wh.id} center={[wh.lat, wh.lng]} {...circleIcon('#22C55E', 9)}>
             <Popup>
               <div className="text-xs">
@@ -137,7 +137,7 @@ export default function MapView({ className = '', height = '500px' }: { classNam
         ))}
 
         {/* Hospitals */}
-        {selectedLayer.hospitals && data.hospitals.map((h: any) => (
+        {selectedLayer.hospitals && (data.hospitals || []).filter((h: any) => typeof h.lat === 'number' && typeof h.lng === 'number' && !isNaN(h.lat) && !isNaN(h.lng) && h.lat !== 0 && h.lng !== 0).map((h: any) => (
           <CircleMarker key={h.id} center={[h.lat, h.lng]} {...circleIcon('#EF4444', 7)}>
             <Popup>
               <div className="text-xs">
@@ -150,7 +150,7 @@ export default function MapView({ className = '', height = '500px' }: { classNam
         ))}
 
         {/* Vehicles */}
-        {selectedLayer.vehicles && data.vehicles.map((v: any) => (
+        {selectedLayer.vehicles && (data.vehicles || []).filter((v: any) => typeof v.lat === 'number' && typeof v.lng === 'number' && !isNaN(v.lat) && !isNaN(v.lng) && v.lat !== 0 && v.lng !== 0).map((v: any) => (
           <CircleMarker key={v.id} center={[v.lat, v.lng]} {...circleIcon('#0D9488', 6)}>
             <Popup>
               <div className="text-xs">
@@ -163,7 +163,7 @@ export default function MapView({ className = '', height = '500px' }: { classNam
         ))}
 
         {/* Alerts */}
-        {selectedLayer.alerts && data.alerts.map((a: any) => (
+        {selectedLayer.alerts && (data.alerts || []).filter((a: any) => typeof a.lat === 'number' && typeof a.lng === 'number' && !isNaN(a.lat) && !isNaN(a.lng) && a.lat !== 0 && a.lng !== 0).map((a: any) => (
           <CircleMarker key={a.id} center={[a.lat, a.lng]}
             {...circleIcon(a.severity === 'CRITICAL' ? '#EF4444' : '#F59E0B', a.severity === 'CRITICAL' ? 14 : 11)}>
             <Popup>

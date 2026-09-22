@@ -1,16 +1,21 @@
 import { NextRequest } from 'next/server';
-import { apiSuccess, apiValidationError, apiError } from '@/lib/api/response';
+import { apiSuccess, apiValidationError, handleApiError } from '@/lib/api/response';
 import { shipmentDispatchSchema } from '@/lib/validation';
 import { dispatchShipment, listAllShipments } from '@/lib/services/dispatch.service';
-import { getSession } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/authorization';
+import { filterByTenant } from '@/lib/db/tenant-scope';
 
 export async function GET(request: NextRequest) {
   try {
+    const user = await requirePermission(request, 'shipments:read');
     const { searchParams } = new URL(request.url);
     const vehicleId = searchParams.get('vehicle_id');
     const driverId = searchParams.get('driver_id');
 
     let shipments = await listAllShipments();
+
+    // Enforce tenant isolation on returned records
+    shipments = filterByTenant(shipments, user);
 
     // Default to active dispatches (DISPATCHED or IN_TRANSIT) unless status query specified
     const status = searchParams.get('status');
@@ -31,13 +36,13 @@ export async function GET(request: NextRequest) {
 
     return apiSuccess(shipments, { count: shipments.length });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to retrieve dispatches';
-    return apiError(msg, 'DISPATCH_FETCH_ERROR', 500);
+    return handleApiError(err);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await requirePermission(request, 'shipments:dispatch');
     const body = await request.json();
     const parsed = shipmentDispatchSchema.safeParse(body);
 
@@ -45,7 +50,6 @@ export async function POST(request: NextRequest) {
       return apiValidationError(parsed.error);
     }
 
-    const sessionUser = await getSession(request);
     const { shipment_id, vehicle_id, driver_id, route_id } = parsed.data;
 
     const dispatchedShipment = await dispatchShipment({
@@ -53,16 +57,14 @@ export async function POST(request: NextRequest) {
       vehicleId: vehicle_id,
       driverId: driver_id,
       routeId: route_id,
-      dispatcherId: sessionUser?.id || null,
+      dispatcherId: user.id,
     });
 
     return apiSuccess(
       dispatchedShipment,
-      { message: 'Shipment dispatched successfully and driver notified' },
-      200
+      { message: 'Shipment successfully dispatched and driver notified' }
     );
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to dispatch shipment';
-    return apiError(msg, 'DISPATCH_EXECUTION_ERROR', 500);
+    return handleApiError(err);
   }
 }

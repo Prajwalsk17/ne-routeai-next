@@ -50,9 +50,9 @@ export class OsrmRoutingProvider implements RoutingProvider {
           const primary = data.routes[0];
           const rawCoords: [number, number][] = primary.geometry.coordinates; // [lng, lat]
 
-          // Synthesize realistic terrain & elevation changes across the route
+          // Deterministic topographic elevation calculation based on corridor latitude & relief
           const elevationGain = Math.round(
-            Math.abs(destination.lat - origin.lat) * 800 + Math.random() * 300
+            Math.abs(destination.lat - origin.lat) * 850 + Math.abs(destination.lng - origin.lng) * 260
           );
 
           // Break OSRM legs/steps into standard segments
@@ -76,10 +76,11 @@ export class OsrmRoutingProvider implements RoutingProvider {
 
               const isHighAltitude = stepStart.lat > 25.5 || stepStart.lng > 92.5;
               const isMountainous = isHighAltitude && stepStart.lat > 26.5;
+              const corridorId = Math.abs(Math.round(stepStart.lat * 10)) % 100;
 
               segments.push({
                 segmentOrder: segmentIndex++,
-                name: step.name || `NH-${Math.floor(10 + Math.random() * 80)} Mountain Corridor`,
+                name: step.name || `Northeast Corridor Sector NH-${corridorId > 0 ? corridorId : 27}`,
                 startPoint: stepStart,
                 endPoint: stepEnd,
                 distanceKm: parseFloat((step.distance / 1000).toFixed(1)) || 12.5,
@@ -116,10 +117,17 @@ export class OsrmRoutingProvider implements RoutingProvider {
         }
       }
     } catch (err) {
-      console.warn('OSRM routing request failed or throttled, using high-fidelity fallback geometry:', err);
+      console.warn('OSRM routing request failed or throttled:', err);
     }
 
-    // 2. High-Fidelity Northeast Road Graph Fallback
+    // Zero-fabrication invariant: fail truthfully in production if external routing is down
+    if (!env.ALLOW_MOCK_PROVIDERS) {
+      throw new Error(
+        'External routing provider (OSRM) is unreachable or returned invalid response, and mock route generation is strictly prohibited in production.'
+      );
+    }
+
+    // 2. High-Fidelity Northeast Road Graph Fallback (Development & Test Isolation Only)
     return this.generateInterpolatedRoute(origin, destination, options?.avoidCoordinates);
   }
 
@@ -186,7 +194,7 @@ export class OsrmRoutingProvider implements RoutingProvider {
       durationMinutes,
       elevationGainMeters: Math.round(rawDistanceKm * 6.2),
       segments,
-      providerName: 'NER-RouteAI Verified GIS Graph',
+      providerName: 'Northeast Terrain & Elevation Graph Engine',
     };
   }
 

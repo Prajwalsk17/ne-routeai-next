@@ -1,8 +1,19 @@
 import { getServiceSupabase } from '@/lib/db/supabase';
-import { generateOTP as localGenerateOTP, verifyOTP as localVerifyOTP } from '@/lib/db';
 
 export type OtpChannel = 'email' | 'phone';
 export type OtpPurpose = 'login' | 'signup' | 'recovery';
+
+interface StoredOtp {
+  code: string;
+  expiresAt: number;
+  purpose: OtpPurpose;
+}
+
+const localOtpStore = new Map<string, StoredOtp>();
+
+function generateSecureRandomCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 interface RateLimitEntry {
   lastSentAt: number;
@@ -72,7 +83,13 @@ export async function requestOtp(
   }
 
   // 2. Development / Local Fallback
-  const code = localGenerateOTP(normalizedId, purpose);
+  const code = generateSecureRandomCode();
+  localOtpStore.set(normalizedId, {
+    code,
+    expiresAt: now + 10 * 60 * 1000, // 10 minutes
+    purpose,
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     // Securely logged only to local server console — NEVER sent in API JSON
     console.log(`\n========================================`);
@@ -132,15 +149,15 @@ export async function verifyOtpCode(
       const verifyParams =
         channel === 'email'
           ? {
-              email: normalizedId,
-              token: trimmedCode,
-              type: (purpose === 'signup' ? 'signup' : 'email') as 'signup' | 'email',
-            }
+            email: normalizedId,
+            token: trimmedCode,
+            type: (purpose === 'signup' ? 'signup' : 'email') as 'signup' | 'email',
+          }
           : {
-              phone: normalizedId,
-              token: trimmedCode,
-              type: 'sms' as const,
-            };
+            phone: normalizedId,
+            token: trimmedCode,
+            type: 'sms' as const,
+          };
 
       const { data, error } = await supabase.auth.verifyOtp(verifyParams);
 
@@ -156,11 +173,12 @@ export async function verifyOtpCode(
   }
 
   // 2. Local Fallback Verification
-  const isValid = localVerifyOTP(normalizedId, trimmedCode, purpose);
-  if (!isValid) {
+  const stored = localOtpStore.get(normalizedId);
+  if (!stored || stored.code !== trimmedCode || stored.expiresAt < now || stored.purpose !== purpose) {
     return { success: false, error: 'Invalid or expired verification code.' };
   }
 
+  localOtpStore.delete(normalizedId);
   rateLimitCache.delete(normalizedId);
   return { success: true };
 }

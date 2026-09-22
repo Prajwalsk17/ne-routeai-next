@@ -13,6 +13,8 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.staging.example
+!.env.production.example
 
 # Databases / local SQLite leftover
 *.db

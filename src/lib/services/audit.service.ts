@@ -1,5 +1,4 @@
 import { getServiceSupabase } from '@/lib/db/supabase';
-import { logDecision, getDecisionLogs } from '@/lib/db';
 
 export interface AuditLogEntry {
   id?: string;
@@ -9,6 +8,12 @@ export interface AuditLogEntry {
   entityId?: string | null;
   metadata?: Record<string, unknown>;
   createdAt?: string;
+}
+
+const localAuditEntries: AuditLogEntry[] = [];
+
+export function getLocalAuditEntries(): AuditLogEntry[] {
+  return [...localAuditEntries];
 }
 
 /**
@@ -37,18 +42,11 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
   }
 
   // 2. Local fallback storage
-  try {
-    const serializedReason = JSON.stringify({
-      entityType: entry.entityType,
-      entityId: entry.entityId,
-      metadata,
-      timestamp,
-      userId: entry.userId,
-    });
-    logDecision(entry.action, serializedReason);
-  } catch (err) {
-    console.error('Failed to log audit event locally:', err);
-  }
+  localAuditEntries.push({
+    ...entry,
+    createdAt: timestamp,
+    metadata,
+  });
 }
 
 /**
@@ -121,6 +119,282 @@ export async function logAlertAcknowledged(
   });
 }
 
+// -----------------------------------------------------------------------------
+// FLEET & DRIVER AUDIT LOGGING HELPERS
+// -----------------------------------------------------------------------------
+
+export async function logVehicleCreated(
+  vehicleId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'VEHICLE_CREATED',
+    entityType: 'vehicle',
+    entityId: vehicleId,
+    metadata: details,
+  });
+}
+
+export async function logVehicleUpdated(
+  vehicleId: string,
+  userId: string | null,
+  changes: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'VEHICLE_UPDATED',
+    entityType: 'vehicle',
+    entityId: vehicleId,
+    metadata: changes,
+  });
+}
+
+export async function logVehicleArchived(
+  vehicleId: string,
+  userId: string | null,
+  reason?: string
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'VEHICLE_ARCHIVED',
+    entityType: 'vehicle',
+    entityId: vehicleId,
+    metadata: { reason: reason || 'Decommissioned by fleet operator' },
+  });
+}
+
+export async function logVehicleMaintenanceLogged(
+  vehicleId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'VEHICLE_MAINTENANCE_LOGGED',
+    entityType: 'vehicle_maintenance',
+    entityId: vehicleId,
+    metadata: details,
+  });
+}
+
+export async function logVehicleDocumentRecorded(
+  vehicleId: string,
+  userId: string | null,
+  docDetails: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'VEHICLE_DOCUMENT_RECORDED',
+    entityType: 'vehicle_document',
+    entityId: vehicleId,
+    metadata: docDetails,
+  });
+}
+
+export async function logDriverOnboarded(
+  driverId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'DRIVER_ONBOARDED',
+    entityType: 'driver',
+    entityId: driverId,
+    metadata: details,
+  });
+}
+
+export async function logDriverUpdated(
+  driverId: string,
+  userId: string | null,
+  changes: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'DRIVER_UPDATED',
+    entityType: 'driver',
+    entityId: driverId,
+    metadata: changes,
+  });
+}
+
+export async function logDriverArchived(
+  driverId: string,
+  userId: string | null,
+  reason?: string
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'DRIVER_ARCHIVED',
+    entityType: 'driver',
+    entityId: driverId,
+    metadata: { reason: reason || 'Deactivated / suspended by manager' },
+  });
+}
+
+export async function logDriverDocumentRecorded(
+  driverId: string,
+  userId: string | null,
+  docDetails: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'DRIVER_DOCUMENT_RECORDED',
+    entityType: 'driver_document',
+    entityId: driverId,
+    metadata: docDetails,
+  });
+}
+
+// -----------------------------------------------------------------------------
+// SHIPMENT & TRIP AUDIT LOGGING HELPERS
+// -----------------------------------------------------------------------------
+
+export async function logShipmentUpdated(
+  shipmentId: string,
+  userId: string | null,
+  changes: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'SHIPMENT_UPDATED',
+    entityType: 'shipment',
+    entityId: shipmentId,
+    metadata: changes,
+  });
+}
+
+export async function logShipmentCancelled(
+  shipmentId: string,
+  userId: string | null,
+  reason?: string
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'SHIPMENT_CANCELLED',
+    entityType: 'shipment',
+    entityId: shipmentId,
+    metadata: { reason: reason || 'Cancelled by operator' },
+  });
+}
+
+export async function logShipmentDelivered(
+  shipmentId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'SHIPMENT_DELIVERED',
+    entityType: 'shipment',
+    entityId: shipmentId,
+    metadata: details,
+  });
+}
+
+export async function logShipmentItemAdded(
+  shipmentId: string,
+  userId: string | null,
+  itemDetails: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'SHIPMENT_ITEM_ADDED',
+    entityType: 'shipment_item',
+    entityId: shipmentId,
+    metadata: itemDetails,
+  });
+}
+
+export async function logTripCreated(
+  tripId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'TRIP_CREATED',
+    entityType: 'trip',
+    entityId: tripId,
+    metadata: details,
+  });
+}
+
+export async function logTripStatusUpdated(
+  tripId: string,
+  userId: string | null,
+  changes: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'TRIP_STATUS_UPDATED',
+    entityType: 'trip',
+    entityId: tripId,
+    metadata: changes,
+  });
+}
+
+export async function logTripStopCompleted(
+  tripId: string,
+  stopId: string,
+  userId: string | null,
+  stopDetails: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'TRIP_STOP_COMPLETED',
+    entityType: 'trip_stop',
+    entityId: `${tripId}:${stopId}`,
+    metadata: stopDetails,
+  });
+}
+
+export async function logTripAssignmentCreated(
+  tripId: string,
+  shipmentId: string,
+  userId: string | null
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'TRIP_ASSIGNMENT_CREATED',
+    entityType: 'trip_assignment',
+    entityId: `${tripId}:${shipmentId}`,
+    metadata: { tripId, shipmentId },
+  });
+}
+
+export async function logRouteSaved(
+  routeId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'ROUTE_SAVED',
+    entityType: 'route',
+    entityId: routeId,
+    metadata: details,
+  });
+}
+
+export async function logRouteVersionCreated(
+  routeId: string,
+  versionId: string,
+  userId: string | null,
+  details: Record<string, unknown>
+): Promise<void> {
+  return logAuditEvent({
+    userId,
+    action: 'ROUTE_VERSION_CREATED',
+    entityType: 'route_version',
+    entityId: `${routeId}:${versionId}`,
+    metadata: details,
+  });
+}
+
 /**
  * Retrieves audit history for an entity
  */
@@ -136,5 +410,7 @@ export async function getAuditHistory(entityType?: string, entityId?: string) {
   }
 
   // Fallback to local logs
-  return getDecisionLogs();
+  return getLocalAuditEntries();
 }
+
+export const getDecisionLogs = getLocalAuditEntries;

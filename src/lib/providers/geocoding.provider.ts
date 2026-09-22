@@ -2,7 +2,7 @@ import { GeocodingLocation, GeocodingProvider } from '@/lib/providers/types';
 import { getEnv } from '@/lib/env';
 
 // Verified reference points across all 8 Northeast states for instant local & offline search
-const NER_REFERENCE_LOCATIONS: GeocodingLocation[] = [
+export const NER_REFERENCE_LOCATIONS: GeocodingLocation[] = [
   // Assam
   { id: 'loc-gau', name: 'Guwahati', state: 'Assam', district: 'Kamrup Metropolitan', type: 'city', lat: 26.1445, lng: 91.7362, elevationMeters: 55, population: 957352, accessibilityTier: 'HIGH', roadAccessQuality: 'ALL_WEATHER' },
   { id: 'loc-tez', name: 'Tezpur', state: 'Assam', district: 'Sonitpur', type: 'town', lat: 26.6338, lng: 92.8004, elevationMeters: 79, population: 58851, accessibilityTier: 'HIGH', roadAccessQuality: 'ALL_WEATHER' },

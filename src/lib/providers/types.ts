@@ -37,6 +37,8 @@ export interface RouteSegmentDetail {
   terrain: 'PLAIN' | 'HILLY' | 'MOUNTAINOUS';
   roadConditionScore: number;
   elevationMeters?: number;
+  highwayCode?: string;
+  gradientSlopePercent?: number;
 }
 
 export interface RouteCalculationResult {

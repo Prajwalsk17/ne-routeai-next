@@ -1,0 +1,94 @@
+# =============================================================================
+# AuraNER / NER-Route AI — Local Infrastructure Composition
+# Next.js Web Frontend + PostgreSQL 16 PostGIS + Redis 7 Broker
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Next.js Web Application
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auraner-web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - APP_ENV=development
+      - NODE_ENV=production
+      - NEXT_PUBLIC_APP_NAME=AuraNER (Docker)
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ner_routeai
+      - REDIS_URL=redis://redis:6379/0
+      - FASTAPI_BACKEND_URL=http://backend:8000
+      - ALLOW_MOCK_PROVIDERS=true
+      - ROUTING_PROVIDER=osrm
+      - GEOCODING_PROVIDER=nominatim
+      - WEATHER_PROVIDER=open-meteo
+      - TELEMETRY_PROVIDER=mock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auraner-net
+
+  # ---------------------------------------------------------------------------
+  # 2. PostgreSQL 16 + PostGIS 3.4 Spatial Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: auraner-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_password
+      POSTGRES_DB: ner_routeai
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations/0001_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./supabase/seed/dev.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d ner_routeai']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auraner-net
+
+  # ---------------------------------------------------------------------------
+  # 3. Redis 7 Streaming Cache & Lock Manager
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: auraner-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_dev_password
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'redis_dev_password', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auraner-net
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  auraner-net:
+    driver: bridge

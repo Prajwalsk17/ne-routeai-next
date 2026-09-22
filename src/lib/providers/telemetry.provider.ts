@@ -61,8 +61,16 @@ export class DatabaseTelemetryProvider implements TelemetryProvider {
             ? data.coordinates.match(/POINT\(([^ ]+) ([^ ]+)\)/)
             : null;
 
-          const lng = coordsMatch ? parseFloat(coordsMatch[1]) : 91.7362;
-          const lat = coordsMatch ? parseFloat(coordsMatch[2]) : 26.1445;
+          if (!coordsMatch) {
+            return null;
+          }
+
+          const lng = parseFloat(coordsMatch[1]);
+          const lat = parseFloat(coordsMatch[2]);
+
+          if (isNaN(lat) || isNaN(lng)) {
+            return null;
+          }
 
           const result: TelemetryUpdate = {
             vehicleId: data.vehicle_id,
@@ -98,5 +106,27 @@ export function getTelemetryProvider(): TelemetryProvider {
 
 export function getAllCachedTelemetry(): TelemetryUpdate[] {
   return Array.from(latestPositions.values());
+}
+
+export function extractCoordinatesFromTelemetry(input: {
+  latitude?: any;
+  longitude?: any;
+  coordinates?: { lat?: any; lng?: any };
+}): { lat: number; lng: number } | null {
+  const lat = input.latitude ?? input.coordinates?.lat;
+  const lng = input.longitude ?? input.coordinates?.lng;
+
+  if (lat === undefined || lng === undefined || lat === null || lng === null) {
+    return null;
+  }
+
+  const numLat = typeof lat === 'number' ? lat : parseFloat(String(lat));
+  const numLng = typeof lng === 'number' ? lng : parseFloat(String(lng));
+
+  if (isNaN(numLat) || isNaN(numLng) || (numLat === 0 && numLng === 0)) {
+    return null;
+  }
+
+  return { lat: numLat, lng: numLng };
 }
 

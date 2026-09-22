@@ -10,8 +10,72 @@ export interface DispatchMapRoute {
   coordinates: [number, number][]; // [lng, lat]
   isAlternative?: boolean;
   isBlocked?: boolean;
+  isGpsTrack?: boolean; // Distinguishes actual GPS telemetry track from planned road network corridor
   color?: string;
   label?: string;
+}
+
+/**
+ * Validates, filters, and normalizes coordinates to GeoJSON [lng, lat] format
+ */
+export function validateAndNormalizeCoordinates(coords: unknown): [number, number][] {
+  if (!Array.isArray(coords)) return [];
+  const normalized: [number, number][] = [];
+
+  for (const pt of coords) {
+    let lng: number | undefined;
+    let lat: number | undefined;
+
+    if (Array.isArray(pt) && pt.length >= 2) {
+      const p0 = Number(pt[0]);
+      const p1 = Number(pt[1]);
+      if (!Number.isFinite(p0) || !Number.isFinite(p1)) continue;
+
+      // Check if coordinates were passed in inverted [lat, lng] order
+      // In Northeast India / South Asia: Lat is ~20 to ~32, Lng is ~85 to ~100
+      if (p0 >= 10 && p0 <= 40 && p1 >= 70 && p1 <= 110) {
+        // Inverted: p0 is lat, p1 is lng
+        lat = p0;
+        lng = p1;
+      } else if (p1 >= 10 && p1 <= 40 && p0 >= 70 && p0 <= 110) {
+        // Standard GeoJSON: p0 is lng, p1 is lat
+        lng = p0;
+        lat = p1;
+      } else {
+        // Standard bounds check: lng in [-180, 180], lat in [-90, 90]
+        if (Math.abs(p0) <= 90 && Math.abs(p1) > 90 && Math.abs(p1) <= 180) {
+          lat = p0;
+          lng = p1;
+        } else {
+          lng = p0;
+          lat = p1;
+        }
+      }
+    } else if (pt && typeof pt === 'object') {
+      const obj = pt as Record<string, unknown>;
+      const objLat = Number(obj.lat ?? obj.latitude);
+      const objLng = Number(obj.lng ?? obj.longitude);
+      if (Number.isFinite(objLat) && Number.isFinite(objLng)) {
+        lat = objLat;
+        lng = objLng;
+      }
+    }
+
+    if (
+      typeof lng === 'number' &&
+      typeof lat === 'number' &&
+      Number.isFinite(lng) &&
+      Number.isFinite(lat) &&
+      lng >= -180 &&
+      lng <= 180 &&
+      lat >= -90 &&
+      lat <= 90
+    ) {
+      normalized.push([lng, lat]);
+    }
+  }
+
+  return normalized;
 }
 
 export interface DispatchMapVehicle {
@@ -21,6 +85,9 @@ export interface DispatchMapVehicle {
   speedKmh?: number;
   headingDegrees?: number;
   status?: string;
+  freshnessStatus?: 'LIVE' | 'DEGRADED' | 'STALE' | 'OFFLINE';
+  accuracyMeters?: number;
+  lastHeartbeat?: string;
 }
 
 export interface DispatchMapIncident {
@@ -50,8 +117,11 @@ export interface DispatchMapProps {
   incidents?: DispatchMapIncident[];
   safeLocations?: DispatchMapSafeLocation[];
   selectedVehicleId?: string | null;
+  selectedSafeLocationId?: string | null;
+  selectedIncidentId?: string | null;
   onVehicleClick?: (vehicleId: string) => void;
   onIncidentClick?: (incidentId: string) => void;
+  onSafeLocationClick?: (safeLocationId: string) => void;
   showLayerControls?: boolean;
 }
 
@@ -163,13 +233,17 @@ export default function DispatchMap({
   incidents = [],
   safeLocations = [],
   selectedVehicleId,
+  selectedSafeLocationId,
+  selectedIncidentId,
   onVehicleClick,
   onIncidentClick,
+  onSafeLocationClick,
   showLayerControls = true,
 }: DispatchMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const routeMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const [activeBaseStyle, setActiveBaseStyle] = useState<'dark' | 'satellite' | 'streets'>('dark');
   const [layers, setLayers] = useState({
@@ -201,63 +275,99 @@ export default function DispatchMap({
     });
 
     return () => {
+      routeMarkersRef.current.forEach((m) => m.remove());
       markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
       map.remove();
       mapRef.current = null;
+      setIsMapReady(false);
     };
   }, []);
 
-  // Update base tile style
+  // Update Base Style without losing map context
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
+
     map.setStyle(BASE_STYLES[activeBaseStyle]);
     map.once('style.load', () => {
       setStyleRevision((r) => r + 1);
     });
   }, [activeBaseStyle]);
 
-  // Update Route Polyline Layers
+  // Update Route Polyline Layers, Markers, and Fit Bounds
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
 
+    // Guard against style load race condition
+    if (!map.isStyleLoaded()) {
+      map.once('style.load', () => {
+        setStyleRevision((r) => r + 1);
+      });
+      return;
+    }
+
+    // Clean existing route markers
+    routeMarkersRef.current.forEach((m) => m.remove());
+    routeMarkersRef.current = [];
+
     // Clean existing route layers/sources
-    const currentSources = map.getStyle().sources || {};
-    routes.forEach((r, idx) => {
-      const sourceId = `route-source-${idx}`;
-      const layerId = `route-layer-${idx}`;
-      const glowLayerId = `route-glow-${idx}`;
+    const style = map.getStyle();
+    if (style && style.layers) {
+      style.layers.forEach((l) => {
+        if (l.id.startsWith('route-layer-') || l.id.startsWith('route-glow-')) {
+          if (map.getLayer(l.id)) map.removeLayer(l.id);
+        }
+      });
+    }
+    if (style && style.sources) {
+      Object.keys(style.sources).forEach((srcId) => {
+        if (srcId.startsWith('route-source-')) {
+          if (map.getSource(srcId)) map.removeSource(srcId);
+        }
+      });
+    }
 
-      if (map.getLayer(glowLayerId)) map.removeLayer(glowLayerId);
-      if (map.getLayer(layerId)) map.removeLayer(layerId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-    });
+    if (!layers.routes || routes.length === 0) return;
 
-    if (!layers.routes) return;
+    // Track coordinates for bounding box calculation
+    const bounds = new maplibregl.LngLatBounds();
+    let hasValidCoords = false;
 
+    // Validate and draw each route
     routes.forEach((route, idx) => {
-      if (!route.coordinates || route.coordinates.length < 2) return;
+      const validCoords = validateAndNormalizeCoordinates(route.coordinates);
+      if (validCoords.length < 2) return;
 
+      validCoords.forEach(([lng, lat]) => {
+        bounds.extend([lng, lat]);
+        hasValidCoords = true;
+      });
+
+      const isGpsTrack = Boolean(route.isGpsTrack);
       const sourceId = `route-source-${idx}`;
       const layerId = `route-layer-${idx}`;
       const glowLayerId = `route-glow-${idx}`;
 
-      const color = route.isBlocked
-        ? '#EF4444' // Crimson
+      const color = isGpsTrack
+        ? '#06B6D4' // Cyan for Live GPS Telemetry Track
+        : route.isBlocked
+        ? '#EF4444' // Crimson for Hazard Blockage
         : route.isAlternative
-        ? '#10B981' // Emerald
-        : route.color || '#A855F7'; // Orchid Default
+        ? '#10B981' // Emerald for Recalculated Detour
+        : route.color || '#A855F7'; // Orchid Default for Planned Route
 
       map.addSource(sourceId, {
         type: 'geojson',
         data: {
           type: 'Feature',
-          properties: { label: route.label || `Route ${idx + 1}` },
+          properties: {
+            label: route.label || (isGpsTrack ? `GPS Track ${idx + 1}` : `Planned Route ${idx + 1}`),
+            isGpsTrack,
+          },
           geometry: {
             type: 'LineString',
-            coordinates: route.coordinates,
+            coordinates: validCoords,
           },
         },
       });
@@ -273,8 +383,8 @@ export default function DispatchMap({
         },
         paint: {
           'line-color': color,
-          'line-width': 8,
-          'line-opacity': 0.35,
+          'line-width': isGpsTrack ? 6 : 8,
+          'line-opacity': isGpsTrack ? 0.25 : 0.35,
           'line-blur': 3,
         },
       });
@@ -290,11 +400,69 @@ export default function DispatchMap({
         },
         paint: {
           'line-color': color,
-          'line-width': route.isAlternative ? 4 : 5,
-          'line-dasharray': route.isBlocked ? [2, 2] : [1, 0],
+          'line-width': isGpsTrack ? 3.5 : route.isAlternative ? 4 : 5,
+          'line-dasharray': isGpsTrack ? [2, 2] : route.isBlocked ? [2, 2] : [1, 0],
         },
       });
     });
+
+    // Add Origin (Point A) and Destination (Point B) markers for primary planned route (non-GPS track)
+    const primaryRoute = routes.find((r) => !r.isGpsTrack) || routes[0];
+    const primaryCoords = primaryRoute ? validateAndNormalizeCoordinates(primaryRoute.coordinates) : [];
+
+    if (primaryRoute && !primaryRoute.isGpsTrack && primaryCoords.length >= 2) {
+      const startCoord = primaryCoords[0];
+      const endCoord = primaryCoords[primaryCoords.length - 1];
+
+      // Origin Marker (A)
+      const originEl = document.createElement('div');
+      originEl.innerHTML = `
+        <div style="width: 28px; height: 28px; border-radius: 50%; background: #10B981; border: 2.5px solid #FFFFFF; box-shadow: 0 0 12px rgba(16, 185, 129, 0.8); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 800; font-size: 12px; cursor: pointer;">
+          A
+        </div>
+      `;
+      const originPopup = new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(`
+        <div style="background:#14201A; color:#E2E8F0; padding:6px 10px; border-radius:6px; font-family:sans-serif; font-size:11px; border:1px solid #10B98166;">
+          <strong style="color:#10B981;">Origin (Point A)</strong>
+        </div>
+      `);
+      const originMarker = new maplibregl.Marker({ element: originEl })
+        .setLngLat([startCoord[0], startCoord[1]])
+        .setPopup(originPopup)
+        .addTo(map);
+      routeMarkersRef.current.push(originMarker);
+
+      // Destination Marker (B)
+      const destEl = document.createElement('div');
+      destEl.innerHTML = `
+        <div style="width: 28px; height: 28px; border-radius: 50%; background: #F59E0B; border: 2.5px solid #FFFFFF; box-shadow: 0 0 12px rgba(245, 158, 11, 0.8); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 800; font-size: 12px; cursor: pointer;">
+          B
+        </div>
+      `;
+      const destPopup = new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(`
+        <div style="background:#14201A; color:#E2E8F0; padding:6px 10px; border-radius:6px; font-family:sans-serif; font-size:11px; border:1px solid #F59E0B66;">
+          <strong style="color:#F59E0B;">Destination (Point B)</strong>
+        </div>
+      `);
+      const destMarker = new maplibregl.Marker({ element: destEl })
+        .setLngLat([endCoord[0], endCoord[1]])
+        .setPopup(destPopup)
+        .addTo(map);
+      routeMarkersRef.current.push(destMarker);
+    }
+
+    // Fit map viewport to encompass the calculated route smoothly
+    if (hasValidCoords && !bounds.isEmpty()) {
+      try {
+        map.fitBounds(bounds, {
+          padding: 60,
+          maxZoom: 13,
+          duration: 900,
+        });
+      } catch {
+        // Safe fallback
+      }
+    }
   }, [routes, layers.routes, isMapReady, styleRevision]);
 
   // Update Markers (Vehicles, Incidents, Safe Havens)
@@ -309,25 +477,45 @@ export default function DispatchMap({
     // 1. Vehicles
     if (layers.vehicles) {
       vehicles.forEach((v) => {
+        if (
+          !v.coordinates ||
+          typeof v.coordinates.lat !== 'number' ||
+          typeof v.coordinates.lng !== 'number' ||
+          isNaN(v.coordinates.lat) ||
+          isNaN(v.coordinates.lng) ||
+          (v.coordinates.lat === 0 && v.coordinates.lng === 0)
+        ) {
+          return;
+        }
+
         const el = document.createElement('div');
         el.className = 'vehicle-marker-wrapper cursor-pointer';
 
         const isSelected = selectedVehicleId === v.id;
         const heading = v.headingDegrees || 0;
+        const freshness = v.freshnessStatus || 'LIVE';
+        const freshnessBorderColor =
+          freshness === 'LIVE'
+            ? '#2DD4BF' // teal
+            : freshness === 'DEGRADED'
+            ? '#F59E0B' // amber
+            : freshness === 'STALE'
+            ? '#F97316' // orange
+            : '#64748B'; // slate
 
         el.innerHTML = `
           <div class="relative flex items-center justify-center p-2 rounded-full border ${
             isSelected
-              ? 'bg-teal-500/30 border-teal-300 ring-4 ring-teal-400/40 shadow-lg shadow-teal-500/50'
-              : 'bg-[#14201A]/90 border-teal-500/80 shadow-md shadow-black/60'
-          }" style="width: 38px; height: 38px; backdrop-filter: blur(8px);">
+              ? 'bg-teal-500/30 ring-4 ring-teal-400/40 shadow-lg shadow-teal-500/50'
+              : 'bg-[#14201A]/90 shadow-md shadow-black/60'
+          }" style="width: 38px; height: 38px; backdrop-filter: blur(8px); border-color: ${freshnessBorderColor};">
             <div style="transform: rotate(${heading}deg); transition: transform 0.3s ease;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${freshnessBorderColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
               </svg>
             </div>
             ${
-              v.speedKmh && v.speedKmh > 0
+              v.speedKmh && v.speedKmh > 0 && freshness === 'LIVE'
                 ? '<span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping"></span>'
                 : ''
             }
@@ -339,10 +527,12 @@ export default function DispatchMap({
         };
 
         const popup = new maplibregl.Popup({ offset: 25, closeButton: false }).setHTML(`
-          <div style="background:#14201A; color:#E2E8F0; padding:8px 12px; border-radius:8px; border:1px solid rgba(45,212,191,0.3); font-family:sans-serif; font-size:12px;">
-            <div style="font-weight:700; color:#2DD4BF; margin-bottom:4px;">🚚 ${v.label}</div>
+          <div style="background:#14201A; color:#E2E8F0; padding:8px 12px; border-radius:8px; border:1px solid ${freshnessBorderColor}66; font-family:sans-serif; font-size:12px;">
+            <div style="font-weight:700; color:${freshnessBorderColor}; margin-bottom:4px;">🚚 ${v.label}</div>
             <div style="color:#94A3B8;">Speed: <span style="color:#fff;">${v.speedKmh || 0} km/h</span></div>
             <div style="color:#94A3B8;">Status: <span style="color:#A855F7; text-transform:uppercase;">${v.status || 'ACTIVE'}</span></div>
+            <div style="color:#94A3B8;">GPS Signal: <span style="color:${freshnessBorderColor}; font-weight:600;">${freshness}</span></div>
+            ${v.accuracyMeters ? `<div style="color:#64748B; font-size:10px; margin-top:2px;">Accuracy: ±${Math.round(v.accuracyMeters)}m</div>` : ''}
           </div>
         `);
 
@@ -358,15 +548,31 @@ export default function DispatchMap({
     // 2. Incidents
     if (layers.incidents) {
       incidents.forEach((inc) => {
+        if (
+          !inc.coordinates ||
+          typeof inc.coordinates.lat !== 'number' ||
+          typeof inc.coordinates.lng !== 'number' ||
+          isNaN(inc.coordinates.lat) ||
+          isNaN(inc.coordinates.lng) ||
+          (inc.coordinates.lat === 0 && inc.coordinates.lng === 0)
+        ) {
+          return;
+        }
+
         const el = document.createElement('div');
         el.className = 'incident-marker-wrapper cursor-pointer';
 
         const isCritical = inc.severity === 'CRITICAL';
         const color = isCritical ? '#EF4444' : '#F59E0B';
+        const isSelected = selectedIncidentId === inc.id;
 
         el.innerHTML = `
-          <div class="relative flex items-center justify-center rounded-full border animate-pulse"
-               style="width: 32px; height: 32px; background: rgba(20, 32, 26, 0.95); border-color: ${color}; box-shadow: 0 0 14px ${color}88;">
+          <div class="relative flex items-center justify-center rounded-full border ${
+            isSelected
+              ? 'ring-4 ring-offset-2 ring-offset-black scale-125'
+              : ''
+          } animate-pulse"
+               style="width: 32px; height: 32px; background: rgba(20, 32, 26, 0.95); border-color: ${color}; box-shadow: 0 0 ${isSelected ? '24px' : '14px'} ${color};">
             <span style="font-size: 16px;">
               ${inc.type === 'LANDSLIDE' ? '⛰️' : inc.type === 'FLOOD' ? '🌊' : '⚠️'}
             </span>
@@ -392,6 +598,10 @@ export default function DispatchMap({
           .setPopup(popup)
           .addTo(map);
 
+        if (isSelected) {
+          popup.addTo(map);
+        }
+
         markersRef.current.push(marker);
       });
     }
@@ -399,17 +609,36 @@ export default function DispatchMap({
     // 3. Safe Emergency Havens
     if (layers.safeLocations) {
       safeLocations.forEach((safe) => {
+        if (
+          !safe.coordinates ||
+          typeof safe.coordinates.lat !== 'number' ||
+          typeof safe.coordinates.lng !== 'number' ||
+          isNaN(safe.coordinates.lat) ||
+          isNaN(safe.coordinates.lng) ||
+          (safe.coordinates.lat === 0 && safe.coordinates.lng === 0)
+        ) {
+          return;
+        }
+
         const el = document.createElement('div');
         el.className = 'safe-marker-wrapper cursor-pointer';
+        const isSelected = selectedSafeLocationId === safe.id;
 
         el.innerHTML = `
-          <div class="flex items-center justify-center rounded-full border bg-[#14201A]/90 border-emerald-500/80 shadow-md shadow-black/60"
-               style="width: 28px; height: 28px;">
+          <div class="flex items-center justify-center rounded-full border ${
+            isSelected
+              ? 'bg-emerald-500/40 ring-4 ring-emerald-400 border-emerald-400 shadow-xl shadow-emerald-500/60 scale-125'
+              : 'bg-[#14201A]/90 border-emerald-500/80 shadow-md shadow-black/60'
+          }" style="width: 28px; height: 28px; transition: all 0.2s ease;">
             <span style="font-size: 14px;">
               ${safe.type === 'HOSPITAL' ? '🏥' : safe.type === 'POLICE_POST' ? '🚓' : '🏕️'}
             </span>
           </div>
         `;
+
+        el.onclick = () => {
+          if (onSafeLocationClick) onSafeLocationClick(safe.id);
+        };
 
         const popup = new maplibregl.Popup({ offset: 20, closeButton: false }).setHTML(`
           <div style="background:#14201A; color:#E2E8F0; padding:8px 12px; border-radius:8px; border:1px solid rgba(16,185,129,0.4); font-family:sans-serif; font-size:12px;">
@@ -424,10 +653,56 @@ export default function DispatchMap({
           .setPopup(popup)
           .addTo(map);
 
+        if (isSelected) {
+          popup.addTo(map);
+        }
+
         markersRef.current.push(marker);
       });
     }
-  }, [vehicles, incidents, safeLocations, layers, selectedVehicleId, isMapReady]);
+  }, [vehicles, incidents, safeLocations, layers, selectedVehicleId, selectedSafeLocationId, selectedIncidentId, onVehicleClick, onIncidentClick, onSafeLocationClick, isMapReady]);
+
+  // Center map on selected safe location
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady || !selectedSafeLocationId) return;
+    const target = safeLocations.find((s) => s.id === selectedSafeLocationId);
+    if (
+      target &&
+      target.coordinates &&
+      typeof target.coordinates.lat === 'number' &&
+      typeof target.coordinates.lng === 'number' &&
+      !isNaN(target.coordinates.lat) &&
+      !isNaN(target.coordinates.lng)
+    ) {
+      map.flyTo({
+        center: [target.coordinates.lng, target.coordinates.lat],
+        zoom: Math.max(map.getZoom(), 12),
+        duration: 900,
+      });
+    }
+  }, [selectedSafeLocationId, safeLocations, isMapReady]);
+
+  // Center map on selected incident
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady || !selectedIncidentId) return;
+    const target = incidents.find((i) => i.id === selectedIncidentId);
+    if (
+      target &&
+      target.coordinates &&
+      typeof target.coordinates.lat === 'number' &&
+      typeof target.coordinates.lng === 'number' &&
+      !isNaN(target.coordinates.lat) &&
+      !isNaN(target.coordinates.lng)
+    ) {
+      map.flyTo({
+        center: [target.coordinates.lng, target.coordinates.lat],
+        zoom: Math.max(map.getZoom(), 11),
+        duration: 900,
+      });
+    }
+  }, [selectedIncidentId, incidents, isMapReady]);
 
   // Fit bounds helper
   const fitAllPoints = () => {
@@ -557,6 +832,10 @@ export default function DispatchMap({
         <div className="flex items-center gap-2">
           <span className="w-3 h-1 bg-[#EF4444] rounded-full inline-block border-b border-dashed" />
           <span className="text-slate-400">Hazard / Blocked Sector</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-0.5 bg-[#06B6D4] inline-block border-b-2 border-dotted" />
+          <span className="text-slate-400">Actual GPS Track</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-teal-400 inline-block" />

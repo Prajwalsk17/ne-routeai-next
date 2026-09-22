@@ -6,12 +6,21 @@ import type { DemandForecastParams, DemandForecastResult } from '../types';
 import { LOCATIONS, DEMAND_DATA, ACCESSIBILITY_DATA } from '../seed-data';
 
 const SEASON_MULTIPLIERS: Record<string, number> = {
-  MONSOON: 1.4, PRE_MONSOON: 1.2, WINTER: 0.9, SUMMER: 1.0,
+  MONSOON: 1.4,
+  PRE_MONSOON: 1.2,
+  WINTER: 0.9,
+  SUMMER: 1.0,
 };
 
 export function forecastDemand(params: DemandForecastParams): DemandForecastResult {
-  const dd = DEMAND_DATA[params.location_id] || { medicine: 50, food: 50, water: 50, emergencyKits: 50, fuel: 50 };
-  const loc = LOCATIONS.find(l => l.id === params.location_id);
+  const dd = DEMAND_DATA[params.location_id];
+  if (!dd) {
+    throw new Error(
+      `Insufficient data for forecast. Historical consumption records are not available for node ${params.location_id}.`
+    );
+  }
+
+  const loc = LOCATIONS.find((l) => l.id === params.location_id);
   const access = ACCESSIBILITY_DATA[params.location_id];
   const seasonMult = SEASON_MULTIPLIERS[params.season] || 1.0;
   const accessPenalty = access ? Math.max(0, (70 - access.overall) / 100) : 0.1;
@@ -37,9 +46,10 @@ export function forecastDemand(params: DemandForecastParams): DemandForecastResu
       fuel: { current: dd.fuel, predicted_change_pct: forecast(dd.fuel, 0.15) },
     },
     pre_positioning: {
-      recommendation: urgency === 'HIGH'
-        ? `URGENT: Move emergency supplies from nearest high-inventory hub to ${locName} before the predicted disruption window. Priority: medicine and water.`
-        : `Standard pre-positioning recommended for ${locName}. Monitor seasonal demand patterns.`,
+      recommendation:
+        urgency === 'HIGH'
+          ? `URGENT: Move emergency supplies from nearest high-inventory hub to ${locName} before the predicted disruption window. Priority: medicine and water.`
+          : `Standard pre-positioning recommended for ${locName}. Monitor seasonal demand patterns.`,
       urgency,
     },
     data_source: 'AI_ENGINE',

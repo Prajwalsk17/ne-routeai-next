@@ -17,7 +17,7 @@ const STYLES: Record<BadgeVariant, string> = {
 
 interface BadgeProps {
   variant: BadgeVariant | string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
   dot?: boolean;
 }

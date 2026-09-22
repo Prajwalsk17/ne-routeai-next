@@ -3,6 +3,8 @@
 // All TypeScript interfaces for the platform
 // ============================================
 
+export type { RiskItem, RiskItemType } from './types/risk';
+
 // --- Geographic ---
 export interface Location {
   id: string;
@@ -197,6 +199,57 @@ export interface RouteAnalysisResult {
   recommended_route: string;
 }
 
+export interface RouteAlternativeItem {
+  id: string;
+  name: string;
+  distanceKm: number;
+  durationMinutes: number;
+  formattedEta: string;
+  riskScore: number;
+  riskSeverity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  reasonForAlternative: string;
+  coordinates?: [number, number][];
+}
+
+export interface SharedRouteState {
+  routeId: string;
+  originId: string;
+  originName: string;
+  originCoords: { lat: number; lng: number };
+  destinationId: string;
+  destinationName: string;
+  destinationCoords: { lat: number; lng: number };
+  distanceKm: number;
+  durationMinutes: number;
+  formattedEta: string;
+  transportMode: string;
+  cargoType?: string;
+  cargoWeightKg?: number;
+  priority?: Priority;
+  coordinates: [number, number][]; // [lng, lat]
+  segments: any[];
+  elevationGainMeters?: number;
+  maxGradientPct?: number;
+  provider: string;
+  cacheStatus?: string;
+  calculatedAt: string;
+  riskAssessment?: {
+    compositeScore: number;
+    severityLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    factors: Array<{ factor: string; score: number; impact: string }>;
+    intersectedHazards?: Array<{
+      id: string;
+      title: string;
+      type: string;
+      severity: string;
+      impact: string;
+      segmentName?: string;
+    }>;
+    explanation?: string;
+  };
+  alternatives: RouteAlternativeItem[];
+}
+
 export interface RouteAnalyzeParams {
   origin_id: string;
   destination_id: string;
@@ -217,14 +270,61 @@ export interface EmergencyMissionParams {
   priority: Priority;
 }
 
+export interface EmergencyAction {
+  id: string;
+  title: string;
+  description: string;
+  priority: Priority;
+  severity: 'SEVERE' | 'HIGH' | 'MODERATE' | 'LOW';
+  corridor: string;
+  region: string;
+  reason: string;
+  impact: string;
+  responsibleAgency: string;
+  resources: string[];
+  status: 'PENDING' | 'ACCEPTED' | 'MODIFIED' | 'OVERRIDDEN' | 'EXECUTING' | 'COMPLETED';
+  confidence: number;
+  source: string;
+  timestamp: string;
+  actionType: 'AVOID_CORRIDOR' | 'HELICOPTER_SUPPORT' | 'BRO_CLEARING' | 'LAST_MILE' | 'DISASTER_AUTHORITY' | 'CUSTOM';
+  executionNotes?: string;
+}
+
+export interface EmergencyPlanAuditEntry {
+  id: string;
+  timestamp: string;
+  action: 'CREATED' | 'ACCEPTED' | 'MODIFIED' | 'OVERRIDDEN' | 'ACTION_EXECUTED';
+  actor: string;
+  details: string;
+  reason?: string;
+  previousState?: string;
+  newState?: string;
+}
+
 export interface EmergencyResult {
+  mission_id: string;
+  status: 'PENDING' | 'ACCEPTED' | 'MODIFIED' | 'OVERRIDDEN';
   mission_priority_score: number;
   priority_level: string;
   routes: RouteCandidate[];
   recommended_vehicle: Vehicle;
   suitable_vehicles: Vehicle[];
   action_plan: string[];
+  actions: EmergencyAction[];
+  audit_log: EmergencyPlanAuditEntry[];
   data_source: string;
+  timestamp?: string;
+  accepted_at?: string;
+  modified_at?: string;
+  corridor_affected?: string;
+  notes?: string;
+  override_info?: {
+    reason: string;
+    justification: string;
+    operator: string;
+    timestamp: string;
+    decision: string;
+  };
 }
 
 // --- Simulation ---
@@ -311,16 +411,30 @@ export interface Alert {
   type: string;
 }
 
-// --- Copilot ---
 export interface CopilotAction {
   label: string;
   action: string;
   target?: string;
 }
 
+export interface CopilotCard {
+  type: 'route' | 'risk' | 'emergency' | 'info';
+  title: string;
+  badge?: string;
+  badgeVariant?: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW' | 'SAFE' | 'DEFAULT';
+  details: { label: string; value: string }[];
+  actionLabel?: string;
+  actionTarget?: string;
+}
+
 export interface CopilotResponse {
   response: string;
+  intent?: string;
+  toolsExecuted?: string[];
   actions: CopilotAction[];
+  cards?: CopilotCard[];
+  confidence?: number;
+  sourceAttribution?: string;
 }
 
 // --- Analytics ---
@@ -373,8 +487,10 @@ export interface DashboardStats {
 // --- Auth ---
 export interface User {
   name: string;
-  role: 'operator' | 'officer';
+  role: 'operator' | 'officer' | string;
   email: string;
+  organizationId?: string;
+  organization?: string;
 }
 
 export interface AuthResult {

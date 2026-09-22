@@ -1,0 +1,89 @@
+# =============================================================================
+# AuraNER / NER-Route AI — Staging Infrastructure Composition (docker-compose.staging.yml)
+# Environment: STAGING
+# Services: Next.js Web (Staging) + PostgreSQL 16 PostGIS (Port 5433) + Redis 7 (Port 6381)
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Next.js Web Application (Staging Container)
+  # ---------------------------------------------------------------------------
+  web-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auraner-web-staging
+    restart: unless-stopped
+    ports:
+      - '3001:3000'
+    env_file:
+      - .env.staging
+    environment:
+      - APP_ENV=staging
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      redis-staging:
+        condition: service_healthy
+    networks:
+      - auraner-staging-net
+
+  # ---------------------------------------------------------------------------
+  # 2. PostgreSQL 16 + PostGIS 3.4 Spatial Database (Staging Instance)
+  # ---------------------------------------------------------------------------
+  postgres-staging:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: auraner-postgis-staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: staging_user
+      POSTGRES_PASSWORD: staging_secure_password_2024
+      POSTGRES_DB: ner_routeai_staging
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+      - ./supabase/migrations/0001_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./supabase/migrations/0002_domain_expansion.sql:/docker-entrypoint-initdb.d/02_domain.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U staging_user -d ner_routeai_staging']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auraner-staging-net
+
+  # ---------------------------------------------------------------------------
+  # 3. Redis 7 Telemetry & In-Memory Broker (Staging Instance)
+  # ---------------------------------------------------------------------------
+  redis-staging:
+    image: redis:7-alpine
+    container_name: auraner-redis-staging
+    restart: unless-stopped
+    ports:
+      - '6381:6379'
+    volumes:
+      - redisdata_staging:/data
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auraner-staging-net
+
+volumes:
+  pgdata_staging:
+    name: auraner_pgdata_staging
+  redisdata_staging:
+    name: auraner_redisdata_staging
+
+networks:
+  auraner-staging-net:
+    name: auraner-staging-net
+    driver: bridge

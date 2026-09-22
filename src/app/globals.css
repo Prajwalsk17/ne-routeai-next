@@ -233,3 +233,33 @@ canvas {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* --- Form Input Contrast & Autofill Overrides --- */
+/* Ensures browser autofill never turns inputs white or text invisible */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: #F8FAFC !important;
+  -webkit-box-shadow: 0 0 0px 1000px #0B130F inset !important;
+  box-shadow: 0 0 0px 1000px #0B130F inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+  caret-color: #A855F7 !important;
+  color: #F8FAFC !important;
+}
+
+/* Crisp password bullets & text visibility */
+input[type="password"] {
+  letter-spacing: 0.15em;
+}
+
+/* Native date/number input icon contrast */
+::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}

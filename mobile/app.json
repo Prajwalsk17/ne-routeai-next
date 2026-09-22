@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "NER-RouteAI Driver",
+    "slug": "ner-routeai-driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#14201A"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.gov.auraner.driver",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "NER-RouteAI Driver requires access to your location to provide in-cab navigation and safety hazard alerts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "NER-RouteAI Driver requires background location access to transmit emergency beacons and monitor route deviations in mountain sectors.",
+        "NSCameraUsageDescription": "NER-RouteAI Driver requires camera access to capture proof-of-delivery photos and road hazard incident snapshots."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#14201A"
+      },
+      "package": "in.gov.auraner.driver",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "ACCESS_NETWORK_STATE"
+      ]
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "auraner-driver-mobile"
+      },
+      "apiBaseUrl": "https://ne-routeai-next.vercel.app/api/v1",
+      "stagingApiBaseUrl": "https://staging.ne-routeai.in/api/v1",
+      "environment": "staging"
+    }
+  }
+}

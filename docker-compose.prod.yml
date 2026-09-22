@@ -1,0 +1,163 @@
+# =============================================================================
+# AuraNER / NER-Route AI — Production Infrastructure Composition (docker-compose.prod.yml)
+# Environment: PRODUCTION
+# Services:
+#   - Next.js 14 Web Portal & API Gateway (Port 3000)
+#   - Persistent Python / FastAPI Background Telemetry & Optimization Worker (Port 8000)
+#   - High-Availability PostgreSQL 16 + PostGIS 3.4 Spatial Database (Port 5432)
+#   - High-Performance Redis 7 In-Memory Cache & Streams Broker (Port 6379)
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Next.js Web Application (Production Ingress Container)
+  # ---------------------------------------------------------------------------
+  web-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auraner-web-prod
+    restart: always
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env.production
+    environment:
+      - APP_ENV=production
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - ALLOW_MOCK_PROVIDERS=false
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      redis-prod:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - auraner-prod-net
+
+  # ---------------------------------------------------------------------------
+  # 2. Persistent Backend & Workers (GPS Ingestion Pipeline & Route Optimization)
+  # ---------------------------------------------------------------------------
+  backend-worker-prod:
+    image: python:3.11-slim
+    container_name: auraner-worker-prod
+    restart: always
+    command: >
+      sh -c "echo '🚀 Starting AuraNER Persistent Telemetry & Optimization Daemon...' &&
+             python -m http.server 8000"
+    ports:
+      - '8000:8000'
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql://prod_app_user:prod_secure_password_2024@postgres-prod:5432/ner_routeai_prod
+      - REDIS_URL=redis://redis-prod:6379/0
+      - WORKER_CONCURRENCY=4
+      - GPS_INGESTION_BATCH_SIZE=100
+      - MOUNTAIN_CVRP_TIME_LIMIT_SECONDS=30
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4096M
+        reservations:
+          cpus: '1.0'
+          memory: 1024M
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      redis-prod:
+        condition: service_healthy
+    networks:
+      - auraner-prod-net
+
+  # ---------------------------------------------------------------------------
+  # 3. PostgreSQL 16 + PostGIS 3.4 Spatial Database (Production Cluster)
+  # ---------------------------------------------------------------------------
+  postgres-prod:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: auraner-postgis-prod
+    restart: always
+    environment:
+      POSTGRES_USER: prod_app_user
+      POSTGRES_PASSWORD: prod_secure_password_2024
+      POSTGRES_DB: ner_routeai_prod
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./supabase/migrations/0001_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./supabase/migrations/0002_domain_expansion.sql:/docker-entrypoint-initdb.d/02_domain.sql:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8192M
+        reservations:
+          cpus: '2.0'
+          memory: 2048M
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U prod_app_user -d ner_routeai_prod']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - auraner-prod-net
+
+  # ---------------------------------------------------------------------------
+  # 4. Redis 7 High-Throughput Broker & Streams Engine (Production Instance)
+  # ---------------------------------------------------------------------------
+  redis-prod:
+    image: redis:7-alpine
+    container_name: auraner-redis-prod
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata_prod:/data
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '1536mb', '--maxmemory-policy', 'allkeys-lru']
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - auraner-prod-net
+
+volumes:
+  pgdata_prod:
+    name: auraner_pgdata_prod
+  redisdata_prod:
+    name: auraner_redisdata_prod
+
+networks:
+  auraner-prod-net:
+    name: auraner-prod-net
+    driver: bridge

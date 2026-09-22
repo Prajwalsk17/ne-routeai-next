@@ -65,15 +65,23 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
           return observation;
         }
       } catch (err) {
-        console.warn('Open-Meteo weather fetch failed, using realistic NER fallback:', err);
+        console.warn('Open-Meteo weather fetch failed:', err);
       }
     }
 
-    // High-fidelity Northeast terrain weather fallback
+    // In production, strictly reject fabricated weather observations
+    if (!env.ALLOW_MOCK_PROVIDERS) {
+      throw new Error(
+        `Weather observation unavailable for coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)}). Upstream service is unreachable and mock weather generation is prohibited in production.`
+      );
+    }
+
+    // Isolated test environment fallback only when ALLOW_MOCK_PROVIDERS=true
     return this.generateFallbackWeather(lat, lng);
   }
 
   async getWeatherAlongRoute(points: Coordinates[]): Promise<WeatherObservation[]> {
+    const env = getEnv();
     // Sample along the route (every ~4th point to avoid rate limiting)
     const step = Math.max(1, Math.floor(points.length / 5));
     const samples: Coordinates[] = [];
@@ -86,10 +94,17 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
     }
 
     const observations = await Promise.all(
-      samples.map((point) => this.getWeather(point.lat, point.lng))
+      samples.map((point) =>
+        this.getWeather(point.lat, point.lng).catch(() => {
+          if (env.ALLOW_MOCK_PROVIDERS) {
+            return this.generateFallbackWeather(point.lat, point.lng);
+          }
+          return null;
+        })
+      )
     );
 
-    return observations;
+    return observations.filter((o): o is WeatherObservation => o !== null);
   }
 
   private mapWmoCode(code: number): string {
